@@ -12,10 +12,15 @@ def run_optimization(algorithm, suite_name, instance, dimensions, seed, result_f
     for problem in suite:
         problem.observe_with(observer)
 
-        es = SUPPORTED_ALGORITHMS[algorithm](problem.dimension * [0], 0.5, {'seed': seed})
+        print(f'dim: {(problem.dimension)}')
+        es = SUPPORTED_ALGORITHMS[algorithm](problem.initial_solution, 0.5, {'seed': seed})
         while not es.stop():
-            solutions = es.ask()
-            es.tell(solutions, [problem(x) for x in solutions])
+            if algorithm == 'MAES':
+                z, d, solutions = es.ask()
+                es.tell(z, d, solutions, [problem(x) for x in solutions])
+            else:
+                solutions = es.ask()
+                es.tell(solutions, [problem(x) for x in solutions])
             es.disp()
 
         problem.free()
