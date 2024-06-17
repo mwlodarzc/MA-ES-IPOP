@@ -1,13 +1,12 @@
 import numpy as np
 import time
+from copy import deepcopy
 
 class MAES_IPOP:
     def __init__(self, x0, sigma, options):
         self.start_time = time.time()
 
         self.sigma = sigma
-        self.initial_sigma = sigma
-        print(sigma)
         self.maxfevals = options.get('maxfevals', 10000)
         self.N = len(x0)
         self.eval_count = 0
@@ -15,6 +14,7 @@ class MAES_IPOP:
 
         # Restart tracking
         self.restart_count = 0  # Track number of restarts
+        self.best_scores_history = []  # To track best scores over generations
 
         # Algorithm parameters
         self.lambda_ = int(4 + np.floor(3 * np.log(self.N)))   # Offspring size
@@ -25,6 +25,9 @@ class MAES_IPOP:
         self.M = np.eye(self.N, dtype=np.float64)  # Initial transformation matrix (identity)
         self.s = np.zeros(self.N, dtype=np.float64)  # Evolution path for step size control
         self.psigma = 0
+
+        self.initial_sigma = sigma
+        self.initial_y = self.y
 
         self.best_y = None
         self.best_score = np.inf
@@ -79,54 +82,61 @@ class MAES_IPOP:
 
         self.iteration += 1
 
+        # Update the best scores history
+        self.best_scores_history.append(self.best_score)
+        if len(self.best_scores_history) > 10 + np.ceil(30 * self.N / self.lambda_):
+            self.best_scores_history.pop(0)
+
         # Check restart condition
         if self.check_restart_condition():
             self.restart()
 
     def check_restart_condition(self):
-            # Check if sigma falls below a threshold
-            if self.sigma < 1e-12:
-                return True
-            
-            # No Improvement in Best Objective Function Values
-            if self.iteration > (10 + np.ceil(30 * self.N / self.lambda_)):
-                recent_best_values = [np.min(scores[-(i+1)]) for i in range(10 + int(np.ceil(30 * self.N / self.lambda_)))]
-                if np.max(recent_best_values) - np.min(recent_best_values) == 0:
-                    return True
-
-            # Small Standard Deviation
-            if np.all(np.std(self.M) < 1e-12) and np.linalg.norm(self.s) < 1e-12:
+        # Check if sigma falls below a threshold
+        if self.sigma < 1e-12:
+            return True
+        
+        # No Improvement in Best Objective Function Values
+        if len(self.best_scores_history) >= 10 + np.ceil(30 * self.N / self.lambda_):
+            recent_best_values = self.best_scores_history[-(10 + int(np.ceil(30 * self.N / self.lambda_))):]
+            if np.max(recent_best_values) - np.min(recent_best_values) == 0:
                 return True
 
-            # No Effective Axis Change
-            eigenvalues, eigenvectors = np.linalg.eigh(self.M)
-            for i in range(len(eigenvalues)):
-                perturbation = 0.1 * self.sigma * np.sqrt(eigenvalues[i]) * eigenvectors[:, i]
-                if np.linalg.norm(self.y + perturbation - self.y) < 1e-10:
-                    return True
+        # Small Standard Deviation
+        if np.all(np.std(self.M) < 1e-12) and np.linalg.norm(self.s) < 1e-12:
+            return True
 
-            # No Effective Coordinate Change
-            for i in range(self.N):
-                perturbation = 0.2 * self.sigma
-                if np.linalg.norm(self.y[i] + perturbation - self.y[i]) < 1e-10:
-                    return True
-
-            # Condition Number of Covariance Matrix
-            cond_number = np.linalg.cond(self.M)
-            if cond_number > 1e14:
+        # No Effective Axis Change
+        eigenvalues, eigenvectors = np.linalg.eigh(self.M)
+        for i in range(len(eigenvalues)):
+            perturbation = 0.1 * self.sigma * np.sqrt(eigenvalues[i]) * eigenvectors[:, i]
+            if np.linalg.norm(self.y + perturbation - self.y) < 1e-10:
                 return True
 
-            return False
+        # No Effective Coordinate Change
+        for i in range(self.N):
+            perturbation = 0.2 * self.sigma
+            if np.linalg.norm(self.y[i] + perturbation - self.y[i]) < 1e-10:
+                return True
+
+        # Condition Number of Covariance Matrix
+        cond_number = np.linalg.cond(self.M)
+        if cond_number > 1e14:
+            return True
+
+        return False
 
     def restart(self):
         self.restart_count += 1
         self.lambda_ *= 2  # Double the population size
         self.update_population_parameters()  # Update population parameters with new lambda
 
-        self.sigma = self.initial_sigma  # Reset sigma
-        self.y = np.random.uniform(-5, 5, self.N)  # Reset starting point, could be problem-specific
+        self.sigma = self.initial_sigma  # Reset sigma, or any appropriate initial value
+        self.y = deepcopy(self.initial_y)  # Reset starting point, could be problem-specific
         self.M = np.eye(self.N, dtype=np.float64)  # Reset transformation matrix
         self.s = np.zeros(self.N, dtype=np.float64)  # Reset evolution path
+        self.iteration = 0  # Reset iteration counter
+        self.best_scores_history = []  # Reset the history of best scores
 
         print(f"Restarting with population size: {self.lambda_}")
 
