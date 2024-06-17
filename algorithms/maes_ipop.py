@@ -5,7 +5,6 @@ from copy import deepcopy
 class MAES_IPOP:
     def __init__(self, x0, sigma, options):
         self.start_time = time.time()
-
         self.sigma = sigma
         self.maxfevals = options.get('maxfevals', 10000)
         self.N = len(x0)
@@ -18,7 +17,6 @@ class MAES_IPOP:
 
         # Algorithm parameters
         self.lambda_ = int(4 + np.floor(3 * np.log(self.N)))   # Offspring size
-
         self.update_population_parameters()  # Use a method to update population parameters
 
         self.y = np.array(x0, dtype=np.float64)
@@ -31,6 +29,11 @@ class MAES_IPOP:
 
         self.best_y = None
         self.best_score = np.inf
+
+        # Seed for reproducibility
+        self.seed = options.get('seed', None)
+        if self.seed is not None:
+            np.random.seed(self.seed)
 
     def update_population_parameters(self):
         self.mu = int(np.floor(self.lambda_/2))  # Population size

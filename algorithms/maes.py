@@ -33,6 +33,11 @@ class MAES:
         self.best_y = None
         self.best_score = np.inf
 
+        # Seed for reproducibility
+        self.seed = options.get('seed', None)
+        if self.seed is not None:
+            np.random.seed(self.seed)
+
     @staticmethod
     def weighted_sum(values, weights):
         weighted_values = values * weights[:, np.newaxis, np.newaxis]
